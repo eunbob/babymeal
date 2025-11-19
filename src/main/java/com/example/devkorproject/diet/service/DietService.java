@@ -6,13 +6,13 @@ import com.example.devkorproject.customer.entity.CustomerEntity;
 import com.example.devkorproject.diet.entity.DietEntity;
 import com.example.devkorproject.customer.exception.CustomerDoesNotExistException;
 import com.example.devkorproject.customer.repository.CustomerRepository;
-import com.example.devkorproject.diet.config.ChatGptConfig;
 import com.example.devkorproject.diet.dto.*;
 import com.example.devkorproject.diet.entity.SimpleDietEntity;
 import com.example.devkorproject.diet.exception.SimpleDietDoesNotExistException;
 import com.example.devkorproject.diet.exception.SimpleDietHeartFalseException;
 import com.example.devkorproject.diet.repository.DietRepository;
 import com.example.devkorproject.diet.repository.SimpleDietRepository;
+import com.example.devkorproject.diet.service.recommendation.RecommendationEngine;
 import com.example.devkorproject.fridge.repository.FridgeRepository;
 import com.example.devkorproject.post.exception.CustomerDoesNotMatchException;
 
@@ -20,14 +20,8 @@ import java.util.logging.Logger;
 import lombok.RequiredArgsConstructor;
 import org.json.JSONArray;
 import org.json.JSONException;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
-import org.springframework.beans.factory.annotation.Value;
 import org.json.JSONObject;
+import org.springframework.stereotype.Service;
 
 
 import java.time.LocalDateTime;
@@ -46,26 +40,7 @@ public class DietService {
     private final CustomerRepository customerRepository;
     private final FridgeRepository fridgeRepository;
     private final SimpleDietRepository simpleDietRepository;
-    private final RestTemplate restTemplate;
-    
-    @Value("${apikey.chatgpt}")
-    private String apiKey;
-
-    public HttpEntity<GptReqDto> buildHttpEntity(GptReqDto chatGptRequest){
-        HttpHeaders httpHeaders = new HttpHeaders();
-        httpHeaders.setContentType(MediaType.parseMediaType(ChatGptConfig.MEDIA_TYPE));
-        httpHeaders.add(ChatGptConfig.AUTHORIZATION, ChatGptConfig.BEARER + apiKey);
-        return new HttpEntity<>(chatGptRequest, httpHeaders);
-    }
-    public GptResDto getResponse(HttpEntity<GptReqDto> chatGptRequestHttpEntity){
-
-        ResponseEntity<GptResDto> responseEntity = restTemplate.postForEntity(
-                ChatGptConfig.CHAT_URL,
-                chatGptRequestHttpEntity,
-                GptResDto.class);
-
-        return responseEntity.getBody();
-    }
+    private final RecommendationEngine recommendationEngine;
 
     public  SimpleResDto[] askQuestion(Long customerId, Long babyId, SimpleReqDto simpleRequestDto) throws JSONException {
 
@@ -79,11 +54,10 @@ public class DietService {
             throw new BabyDoesNotExistException();
         BabyEntity babyEntity = opBabyEntity.get();
 
-        if(customerEntity.getCustomerId().equals(customerId)){
+        if(!customerEntity.getCustomerId().equals(customerId)){
             throw new CustomerDoesNotMatchException();
         }
 
-        List<ChatGptMessage> messages = new ArrayList<>();
         String fridge = simpleRequestDto.getFridge();
         String keyword = simpleRequestDto.getKeyword();
         String type = simpleRequestDto.getType();
@@ -109,22 +83,7 @@ public class DietService {
                 "{“dietName”:””,“description”:””,“time”:”분 단위, 숫자만”,“difficulty”:”간단/보통/복잡 중 하나”}";
 
         logger.info(question);
-        messages.add(ChatGptMessage.builder()
-                .role(ChatGptConfig.ROLE)
-                .content(question)
-                .build());
-
-        String message =  this.getResponse(
-                this.buildHttpEntity(
-                        new GptReqDto(
-                                ChatGptConfig.CHAT_MODEL,
-                                ChatGptConfig.MAX_TOKEN,
-                                ChatGptConfig.TEMPERATURE,
-                                ChatGptConfig.STREAM,
-                                messages
-                        )
-                )
-        ).getChoices().get(0).getMessage().getContent();
+        String message = recommendationEngine.requestRecommendation(question);
         logger.info(message);
 
         JSONArray jsonArray = new JSONArray(message);
@@ -192,29 +151,12 @@ public class DietService {
         String ingredients = ingredientsList.stream().collect(Collectors.joining(","));
         logger.info(ingredients);
 
-        List<ChatGptMessage> messages = new ArrayList<>();
         String question = ingredients + "를 활용한 " +
                 allergyMessage +
                 "음식을 다음의 json 형식으로 두 가지 추천해줘. " +
                 "{“dietName”:””,“description”:””,“time”:”분 단위, 숫자만”,“difficulty”:”간단/보통/복잡 중 하나”}";
         logger.info(question);
-
-        messages.add(ChatGptMessage.builder()
-                .role(ChatGptConfig.ROLE)
-                .content(question)
-                .build());
-
-        String message =  this.getResponse(
-                this.buildHttpEntity(
-                        new GptReqDto(
-                                ChatGptConfig.CHAT_MODEL,
-                                ChatGptConfig.MAX_TOKEN,
-                                ChatGptConfig.TEMPERATURE,
-                                ChatGptConfig.STREAM,
-                                messages
-                        )
-                )
-        ).getChoices().get(0).getMessage().getContent();
+        String message = recommendationEngine.requestRecommendation(question);
         logger.info(message);
 
         JSONArray jsonArray = new JSONArray(message);
@@ -262,27 +204,10 @@ public class DietService {
             throw new SimpleDietDoesNotExistException();
         SimpleDietEntity simpleDiet = optionalSimpleDiet.get();
 
-        List<ChatGptMessage> messages = new ArrayList<>();
         String question = simpleDiet.getDietName()
                 + "에 대해 다음의 json형식으로 답해줘. 레시피는 단계별로 줄바꿈해줘."
                 + "{‘ingredients’:’’,’recipe’:’’}";
-
-        messages.add(ChatGptMessage.builder()
-                .role(ChatGptConfig.ROLE)
-                .content(question)
-                .build());
-
-        String message =  this.getResponse(
-                this.buildHttpEntity(
-                        new GptReqDto(
-                                ChatGptConfig.CHAT_MODEL,
-                                ChatGptConfig.MAX_TOKEN,
-                                ChatGptConfig.TEMPERATURE,
-                                ChatGptConfig.STREAM,
-                                messages
-                        )
-                )
-        ).getChoices().get(0).getMessage().getContent();
+        String message = recommendationEngine.requestRecommendation(question);
         logger.info(message);
 
         JSONObject jsonObject = new JSONObject(message);
@@ -319,27 +244,10 @@ public class DietService {
             throw new SimpleDietDoesNotExistException();
         SimpleDietEntity simpleDiet = optionalSimpleDiet.get();
 
-        List<ChatGptMessage> messages = new ArrayList<>();
         String question = simpleDiet.getDietName()
                 + "에 대해 다음의 json형식으로 답해줘. 레시피는 단계별로 줄바꿈해줘."
                 + "{‘ingredients’:’’,’recipe’:’’}";
-
-        messages.add(ChatGptMessage.builder()
-                .role(ChatGptConfig.ROLE)
-                .content(question)
-                .build());
-
-        String message =  this.getResponse(
-                this.buildHttpEntity(
-                        new GptReqDto(
-                                ChatGptConfig.CHAT_MODEL,
-                                ChatGptConfig.MAX_TOKEN,
-                                ChatGptConfig.TEMPERATURE,
-                                ChatGptConfig.STREAM,
-                                messages
-                        )
-                )
-        ).getChoices().get(0).getMessage().getContent();
+        String message = recommendationEngine.requestRecommendation(question);
         logger.info(message);
 
         JSONObject jsonObject = new JSONObject(message);
@@ -441,27 +349,10 @@ public class DietService {
             );
         }
 
-        List<ChatGptMessage> messages = new ArrayList<>();
         String question = simpleDiet.getDietName()
                 + "에 대해 다음의 json형식으로 답해줘. 레시피는 단계별로 줄바꿈해줘."
                 + "{‘ingredients’:’’,’recipe’:’’}";
-
-        messages.add(ChatGptMessage.builder()
-                .role(ChatGptConfig.ROLE)
-                .content(question)
-                .build());
-
-        String message =  this.getResponse(
-                this.buildHttpEntity(
-                        new GptReqDto(
-                                ChatGptConfig.CHAT_MODEL,
-                                ChatGptConfig.MAX_TOKEN,
-                                ChatGptConfig.TEMPERATURE,
-                                ChatGptConfig.STREAM,
-                                messages
-                        )
-                )
-        ).getChoices().get(0).getMessage().getContent();
+        String message = recommendationEngine.requestRecommendation(question);
         logger.info(message);
 
 
