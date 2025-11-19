@@ -1,0 +1,84 @@
+package com.example.devkorproject.common.constants;
+
+import com.example.devkorproject.common.exception.GeneralException;
+import org.springframework.http.HttpStatus;
+
+import java.util.Arrays;
+import java.util.Optional;
+import java.util.function.Predicate;
+
+public enum ErrorCode {
+    OK(0, HttpStatus.OK, "OK"),
+    BAD_REQUEST(10000, HttpStatus.BAD_REQUEST, "Bad request"),
+    INTERNAL_ERROR(20000, HttpStatus.INTERNAL_SERVER_ERROR, "Internal error"),
+    NOT_FOUND(10001, HttpStatus.NOT_FOUND, "Requested resource is not found"),
+    BABY_DOES_NOT_EXIST(10001, HttpStatus.BAD_REQUEST, "Requested baby is not found"),
+    CUSTOMER_DOES_NOT_EXIST(10001, HttpStatus.BAD_REQUEST, "Requested customer is not found"),
+    SIMPLE_DIET_DOES_NOT_EXIST(10001, HttpStatus.BAD_REQUEST, "Requested diet is not found"),
+    DIET_DOES_NOT_EXIST(10001, HttpStatus.BAD_REQUEST, "Requested diet is not found"),
+    POST_DOES_NOT_EXIST(10001,HttpStatus.BAD_REQUEST,"Requested post is not found"),
+    CUSTOMER_DOES_NOT_MATCH(10001,HttpStatus.BAD_REQUEST,"Requested customer does not match"),
+    FRIDGE_DOES_NOT_EXIST(10001,HttpStatus.BAD_REQUEST,"Requested fridge does not found"),
+    CUSTOMER_NAME_DOES_NOT_EXIST(10001,HttpStatus.BAD_REQUEST,"Requested customer name does not found"),
+    SCRAP_DOES_NOT_EXIST(10001,HttpStatus.BAD_REQUEST,"Requested scrap does not found"),
+    FCMTOKEN_DOES_NOT_EXIST(10001,HttpStatus.BAD_REQUEST, "Requested fcmToken does not found"),
+    CUSTOMER_EXIST(10001,HttpStatus.BAD_REQUEST,"Requested customer exist"),
+    BLANK_PASSWORD(10001,HttpStatus.BAD_REQUEST,"Password cannot be empty"),
+    WRONG_PASSWORD(10001,HttpStatus.BAD_REQUEST,"Password is wrong"),
+    WRONG_TOKEN(10001,HttpStatus.BAD_REQUEST,"Token is wrong"),
+    COMMENT_DOES_NOT_EXIST(10001,HttpStatus.BAD_REQUEST,"Comment does not exist"),
+    SIMPLE_DIET_HEART_FALSE(10001,HttpStatus.BAD_REQUEST,"This simple diet is not hearted."),
+    CANNOT_GIVE_LIKE(10001,HttpStatus.BAD_REQUEST,"Requested customer cannot give like."),
+    CANNOT_GIVE_SCRAP(10001,HttpStatus.BAD_REQUEST,"Requested customer cannot give scrap")
+    ;
+    private final Integer code;
+    private final HttpStatus httpStatus;
+    private final String message;
+
+    ErrorCode(Integer code, HttpStatus httpStatus, String message) {
+        this.code = code;
+        this.httpStatus = httpStatus;
+        this.message = message;
+    }
+    public static ErrorCode valueOf(HttpStatus httpStatus) {
+        if (httpStatus == null) {
+            throw new GeneralException("HttpStatus is null.");
+        }
+
+        return Arrays.stream(ErrorCode.values())
+                .filter(errorCode -> errorCode.getHttpStatus() == httpStatus)
+                .findFirst()
+                .orElseGet(() -> {
+                    if (httpStatus.is4xxClientError()) {
+                        return ErrorCode.BAD_REQUEST;
+                    } else if (httpStatus.is5xxServerError()) {
+                        return ErrorCode.INTERNAL_ERROR;
+                    } else {
+                        return ErrorCode.OK;
+                    }
+                });
+    }
+
+    public String getMessage() {
+        return this.message;
+    }
+
+    public String getMessage(String message) {
+        return Optional.ofNullable(message)
+                .filter(Predicate.not(String::isBlank))
+                .orElse(this.message);
+    }
+
+    @Override
+    public String toString() {
+        return String.format("%s (%d)", this.name(), this.getCode());
+    }
+
+    public Integer getCode() {
+        return code;
+    }
+
+    public HttpStatus getHttpStatus() {
+        return httpStatus;
+    }
+}

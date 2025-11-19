@@ -1,0 +1,10 @@
+package com.example.devkorproject.post.dto;
+
+import lombok.Data;
+import lombok.RequiredArgsConstructor;
+
+@Data
+@RequiredArgsConstructor
+public class LikesReq {
+    private Long postId;
+}
